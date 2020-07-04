@@ -16,7 +16,7 @@
         <TargetCommonOption>
           <Device>STM32H743IIKx</Device>
           <Vendor>STMicroelectronics</Vendor>
-          <PackID>Keil.STM32H7xx_DFP.2.3.1</PackID>
+          <PackID>Keil.STM32H7xx_DFP.2.4.0</PackID>
           <PackURL>https://www.keil.com/pack/</PackURL>
           <Cpu>IRAM(0x20000000,0x00020000) IRAM2(0x24000000,0x00080000) IROM(0x08000000,0x00200000) CPUTYPE("Cortex-M7") FPU3(DFPU) CLOCK(12000000) ELITTLE</Cpu>
           <FlashUtilSpec></FlashUtilSpec>
@@ -313,7 +313,7 @@
           <Cads>
             <interw>1</interw>
             <Optim>1</Optim>
-            <oTime>0</oTime>
+            <oTime>1</oTime>
             <SplitLS>0</SplitLS>
             <OneElfS>1</OneElfS>
             <Strict>0</Strict>
@@ -335,10 +335,10 @@
             <v6WtE>0</v6WtE>
             <v6Rtti>0</v6Rtti>
             <VariousControls>
-              <MiscControls>--no-multibyte-chars;--locale=english</MiscControls>
+              <MiscControls>--locale=english</MiscControls>
               <Define>USE_HAL_DRIVER, STM32H743xx,USE_USB_HS,STM32H7,NO_HOST</Define>
               <Undefine></Undefine>
-              <IncludePath>..\..\Libraries\CMSIS\Include;..\..\Libraries\CMSIS\Device\ST\STM32H7xx\Include;..\..\Libraries\STM32H7xx_HAL_Driver\Inc;..\..\User\bsp\inc;..\..\User;..\..\User\bsp;..\..\User\fonts;..\..\User\images;..\..\User\app\inc;..\..\Libraries\FatFs\src;..\..\Libraries\FatFs\src\drivers;..\..\Libraries\LwIP\src\include;..\..\Libraries\LwIP\src\apps;..\..\Libraries\LwIP\system;..\..\Libraries\LwIP\phy_drv;..\..\User\lwip_if;..\..\User\lwip_http;..\..\User\lwip_tcp;..\..\Libraries\STM32_USB_Device_Library\Core\Inc;..\..\Libraries\STM32_USB_Device_Library\Class\MSC\Inc;..\..\User\modbus;..\..\User\programmer;..\..\User\lua\src;..\..\User\lua\if;..\..\User\st_usb;..\..\User\st_usb\usbd_virtual_com;..\..\User\st_usb\usbd_mass_storage;..\..\Libraries\STM32_USB_Device_Library\Class\CDC\Inc;..\..\User\daplink\source\daplink\cmsis-dap;..\..\User\daplink\source\target;..\..\User\daplink\source\family\st\stm32h7;..\..\User\daplink\source\hic_hal;..\..\User\daplink\source\daplink;..\..\User\daplink\source\hic_hal\stm32\stm32h750;..\..\User\daplink\source\rtos_none;..\..\User\daplink\source\daplink\interface;..\..\User\daplink\source\daplink\settings;..\..\User\daplink\source\usb;..\..\User\teeny_usb\usb_stack\inc;..\..\User\teeny_usb\usb_stack\class;..\..\User\teeny_usb\usb_app</IncludePath>
+              <IncludePath>..\..\Libraries\CMSIS\Include;..\..\Libraries\CMSIS\Device\ST\STM32H7xx\Include;..\..\Libraries\STM32H7xx_HAL_Driver\Inc;..\..\User\bsp\inc;..\..\User;..\..\User\bsp;..\..\User\fonts;..\..\User\images;..\..\User\app\inc;..\..\Libraries\FatFs\src;..\..\Libraries\FatFs\src\drivers;..\..\Libraries\LwIP\src\include;..\..\Libraries\LwIP\src\apps;..\..\Libraries\LwIP\system;..\..\Libraries\LwIP\phy_drv;..\..\User\lwip_if;..\..\User\lwip_http;..\..\User\lwip_tcp;..\..\Libraries\STM32_USB_Device_Library\Core\Inc;..\..\Libraries\STM32_USB_Device_Library\Class\MSC\Inc;..\..\User\modbus;..\..\User\programmer;..\..\User\lua\src;..\..\User\lua\if;..\..\User\st_usb;..\..\User\st_usb\usbd_virtual_com;..\..\User\st_usb\usbd_mass_storage;..\..\Libraries\STM32_USB_Device_Library\Class\CDC\Inc;..\..\User\daplink\source\daplink\cmsis-dap;..\..\User\daplink\source\target;..\..\User\daplink\source\family\st\stm32h7;..\..\User\daplink\source\hic_hal;..\..\User\daplink\source\daplink;..\..\User\daplink\source\hic_hal\stm32\stm32h750;..\..\User\daplink\source\rtos_none;..\..\User\daplink\source\daplink\interface;..\..\User\daplink\source\daplink\settings;..\..\User\daplink\source\usb;..\..\User\teeny_usb\usb_stack\inc;..\..\User\teeny_usb\usb_stack\class;..\..\User\teeny_usb\usb_app;..\..\User\daplink\source\target</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -418,14 +418,14 @@
               <FilePath>..\..\User\app\src\status_system_set.c</FilePath>
             </File>
             <File>
-              <FileName>status_current_meter.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\User\app\src\status_current_meter.c</FilePath>
-            </File>
-            <File>
               <FileName>status_resistor_meter.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\User\app\src\status_resistor_meter.c</FilePath>
+            </File>
+            <File>
+              <FileName>status_current_meter.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\app\src\status_current_meter.c</FilePath>
             </File>
             <File>
               <FileName>status_temp_meter.c</FileName>
@@ -468,9 +468,39 @@
               <FilePath>..\..\User\app\src\status_lua.c</FilePath>
             </File>
             <File>
-              <FileName>demo_sd_fatfs.c</FileName>
+              <FileName>file_lib.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\User\app\src\demo_sd_fatfs.c</FilePath>
+              <FilePath>..\..\User\app\src\file_lib.c</FilePath>
+            </File>
+            <File>
+              <FileName>status_mini_dso.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\app\src\status_mini_dso.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>BSP</GroupName>
+          <Files>
+            <File>
+              <FileName>bsp.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\User\bsp\bsp.h</FilePath>
+            </File>
+            <File>
+              <FileName>bsp.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\bsp\bsp.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_user_lib.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\bsp\src\bsp_user_lib.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_timer.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\bsp\src\bsp_timer.c</FilePath>
               <FileOption>
                 <CommonProperty>
                   <UseCPPCompiler>2</UseCPPCompiler>
@@ -478,7 +508,7 @@
                   <RVCTZI>0</RVCTZI>
                   <RVCTOtherData>0</RVCTOtherData>
                   <ModuleSelection>0</ModuleSelection>
-                  <IncludeInBuild>0</IncludeInBuild>
+                  <IncludeInBuild>2</IncludeInBuild>
                   <AlwaysBuild>2</AlwaysBuild>
                   <GenerateAssemblyFile>2</GenerateAssemblyFile>
                   <AssembleAssemblyFile>2</AssembleAssemblyFile>
@@ -491,7 +521,7 @@
                 <FileArmAds>
                   <Cads>
                     <interw>2</interw>
-                    <Optim>0</Optim>
+                    <Optim>1</Optim>
                     <oTime>2</oTime>
                     <SplitLS>2</SplitLS>
                     <OneElfS>2</OneElfS>
@@ -522,36 +552,6 @@
                   </Cads>
                 </FileArmAds>
               </FileOption>
-            </File>
-            <File>
-              <FileName>file_lib.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\User\app\src\file_lib.c</FilePath>
-            </File>
-          </Files>
-        </Group>
-        <Group>
-          <GroupName>BSP</GroupName>
-          <Files>
-            <File>
-              <FileName>bsp.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\..\User\bsp\bsp.h</FilePath>
-            </File>
-            <File>
-              <FileName>bsp.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\User\bsp\bsp.c</FilePath>
-            </File>
-            <File>
-              <FileName>bsp_user_lib.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\User\bsp\src\bsp_user_lib.c</FilePath>
-            </File>
-            <File>
-              <FileName>bsp_timer.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\User\bsp\src\bsp_timer.c</FilePath>
             </File>
             <File>
               <FileName>bsp_led.c</FileName>
@@ -1014,6 +1014,16 @@
               <FileType>1</FileType>
               <FilePath>..\..\Libraries\STM32H7xx_HAL_Driver\Src\stm32h7xx_hal_mmc.c</FilePath>
             </File>
+            <File>
+              <FileName>stm32h7xx_hal_crc.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\Libraries\STM32H7xx_HAL_Driver\Src\stm32h7xx_hal_crc.c</FilePath>
+            </File>
+            <File>
+              <FileName>stm32h7xx_hal_crc_ex.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\Libraries\STM32H7xx_HAL_Driver\Src\stm32h7xx_hal_crc_ex.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -1045,9 +1055,14 @@
           <GroupName>Doc</GroupName>
           <Files>
             <File>
-              <FileName>02.例程修改记录.txt</FileName>
+              <FileName>CHANGELOG</FileName>
               <FileType>5</FileType>
-              <FilePath>..\..\Doc\02.例程修改记录.txt</FilePath>
+              <FilePath>..\..\CHANGELOG</FilePath>
+            </File>
+            <File>
+              <FileName>待解决问题.txt</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\Doc\待解决问题.txt</FilePath>
             </File>
           </Files>
         </Group>
@@ -1514,6 +1529,51 @@
               <FileType>1</FileType>
               <FilePath>..\..\User\programmer\prog_if.c</FilePath>
             </File>
+            <File>
+              <FileName>elf_file.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\programmer\elf_file.c</FilePath>
+            </File>
+            <File>
+              <FileName>falsh_error.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\programmer\falsh_error.c</FilePath>
+            </File>
+            <File>
+              <FileName>SWD_flash.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\programmer\SWD_flash.c</FilePath>
+            </File>
+            <File>
+              <FileName>flash_blob.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\User\programmer\flash_blob.h</FilePath>
+            </File>
+            <File>
+              <FileName>FlashOS.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\User\programmer\FlashOS.h</FilePath>
+            </File>
+            <File>
+              <FileName>SWD_flash.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\User\programmer\SWD_flash.h</FilePath>
+            </File>
+            <File>
+              <FileName>stm8_flash.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\programmer\stm8_flash.c</FilePath>
+            </File>
+            <File>
+              <FileName>stm8_swim.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\programmer\stm8_swim.c</FilePath>
+            </File>
+            <File>
+              <FileName>edc_crc_a.asm</FileName>
+              <FileType>2</FileType>
+              <FilePath>..\..\User\programmer\edc_crc_a.asm</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -1820,6 +1880,11 @@
               <FileType>5</FileType>
               <FilePath>..\..\User\lua\if\lua_if_uart.h</FilePath>
             </File>
+            <File>
+              <FileName>lua_if_swim.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\lua\if\lua_if_swim.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -1957,6 +2022,11 @@
               <FileType>1</FileType>
               <FilePath>..\..\User\daplink\source\daplink\cmsis-dap\SWO.c</FilePath>
             </File>
+            <File>
+              <FileName>SW_DP_Multi.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\daplink\source\daplink\cmsis-dap\SW_DP_Multi.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -2037,6 +2107,11 @@
               <FileName>SysTick_Handler.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\User\daplink\source\rtos_none\SysTick_Handler.c</FilePath>
+            </File>
+            <File>
+              <FileName>swd_host_multi.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\daplink\source\daplink\interface\swd_host_multi.c</FilePath>
             </File>
           </Files>
         </Group>

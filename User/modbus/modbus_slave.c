@@ -20,7 +20,8 @@
 #include "modbus_iap.h"
 #include "lua_if.h"
 #include "usbd_cdc_interface.h"
-
+#include "prog_if.h"
+#include "SW_DP_Multi.h"
 
 static void MODS_AnalyzeApp(void);
 
@@ -222,58 +223,58 @@ static void MODS_AnalyzeApp(void)
 {
     switch (g_tModS.RxBuf[1]) /* 第2个字节 功能码 */
     {
-    case 0x01: /* 读取线圈状态*/
-        MODS_01H();
-        break;
+        case 0x01: /* 读取线圈状态*/
+            MODS_01H();
+            break;
 
-    case 0x02: /* 读取输入状态 */
-        MODS_02H();
-        break;
+        case 0x02: /* 读取输入状态 */
+            MODS_02H();
+            break;
 
-    case 0x03: /* 读取1个或多个参数保持寄存器 在一个或多个保持寄存器中取得当前的二进制值*/
-        MODS_03H();
-        break;
+        case 0x03: /* 读取1个或多个参数保持寄存器 在一个或多个保持寄存器中取得当前的二进制值*/
+            MODS_03H();
+            break;
 
-    case 0x04: /* 读取1个或多个模拟量输入寄存器 */
-        MODS_04H();
-        break;
+        case 0x04: /* 读取1个或多个模拟量输入寄存器 */
+            MODS_04H();
+            break;
 
-    case 0x05: /* 强制单线圈（） */
-        MODS_05H();
-        break;
+        case 0x05: /* 强制单线圈（） */
+            MODS_05H();
+            break;
 
-    case 0x06: /* 写单个参数保持寄存器 (存储在CPU的FLASH中，或EEPROM中的参数)*/
-        MODS_06H();
-        break;
+        case 0x06: /* 写单个参数保持寄存器 (存储在CPU的FLASH中，或EEPROM中的参数)*/
+            MODS_06H();
+            break;
 
-    case 0x10: /* 写多个参数保持寄存器 (存储在CPU的FLASH中，或EEPROM中的参数)*/
-        MODS_10H();
-        break;
+        case 0x10: /* 写多个参数保持寄存器 (存储在CPU的FLASH中，或EEPROM中的参数)*/
+            MODS_10H();
+            break;
 
-    case 0x0F:
-        MODS_0FH(); /* 强制多个线圈（对应D01/D02/D03） */
-        break;
+        case 0x0F:
+            MODS_0FH(); /* 强制多个线圈（对应D01/D02/D03） */
+            break;
 
-        //        case 0x15:    /* 写文件寄存器 */
-        //            MODS_15H();
-        //            break;
+            //        case 0x15:    /* 写文件寄存器 */
+            //            MODS_15H();
+            //            break;
 
-    case 0x60: /* 读取波形数据专用功能码 */
-        MODS_60H();
-        break;
+        case 0x60: /* 读取波形数据专用功能码 */
+            MODS_60H();
+            break;
 
-    case 0x64: /* 小程序下载接口 */
-        MODS_64H();
-        break;
+        case 0x64: /* 小程序下载接口 */
+            MODS_64H();
+            break;
 
-    case 0x65: /* 临时执行小程序 */
-        MODS_65H();
-        break;
+        case 0x65: /* 临时执行小程序 */
+            MODS_65H();
+            break;
 
-    default:
-        g_tModS.RspCode = RSP_ERR_CMD;
-        MODS_SendAckErr(g_tModS.RspCode); /* 告诉主机命令错误 */
-        break;
+        default:
+            g_tModS.RspCode = RSP_ERR_CMD;
+            MODS_SendAckErr(g_tModS.RspCode); /* 告诉主机命令错误 */
+            break;
     }
 }
 
@@ -1159,10 +1160,60 @@ static void MODS_65H(void)
         g_tModS.RspCode = RSP_ERR_VALUE; /* 数据值域错误 */
         goto err_ret;
     }
-    //    lual_len = BEBufToUint16(&g_tModS.RxBuf[2]);
 
     if (g_Lua > 0)
     {
+        /* PC机启动编程时，记录开始时间 */
+        if (memcmp((char *)&g_tModS.RxBuf[4], "start_prog()", 12) == 0 || 
+            memcmp((char *)&g_tModS.RxBuf[4], "erase_chip_mcu()", 16) == 0 ||
+            memcmp((char *)&g_tModS.RxBuf[4], "erase_chip_qspi()", 17) == 0 ||
+            memcmp((char *)&g_tModS.RxBuf[4], "erase_chip_eeprom()", 18) == 0)
+        {
+            g_tProg.Time = bsp_GetRunTime();    /* 记录开始时间 */
+            
+            if (g_gMulSwd.MultiMode > 0)   /* 多路模式 */
+            {
+                g_gMulSwd.MultiMode = g_tParam.MultiProgMode;
+
+                if (g_tParam.MultiProgMode == 0)
+                {
+                    g_gMulSwd.Active[0] = 0;
+                    g_gMulSwd.Active[1] = 0;
+                    g_gMulSwd.Active[2] = 0;
+                    g_gMulSwd.Active[3] = 0;
+                }
+                else if (g_tParam.MultiProgMode == 1)
+                {
+                    g_gMulSwd.Active[0] = 1;
+                    g_gMulSwd.Active[1] = 0;
+                    g_gMulSwd.Active[2] = 0;
+                    g_gMulSwd.Active[3] = 0;
+                }
+                else if (g_tParam.MultiProgMode == 2)
+                {
+                    g_gMulSwd.Active[0] = 1;
+                    g_gMulSwd.Active[1] = 1;
+                    g_gMulSwd.Active[2] = 0;
+                    g_gMulSwd.Active[3] = 0;
+                }
+                else if (g_tParam.MultiProgMode == 3)
+                {
+                    g_gMulSwd.Active[0] = 1;
+                    g_gMulSwd.Active[1] = 1;
+                    g_gMulSwd.Active[2] = 1;
+                    g_gMulSwd.Active[3] = 0;
+                }
+                else if (g_tParam.MultiProgMode == 4)
+                {
+                    g_gMulSwd.Active[0] = 1;
+                    g_gMulSwd.Active[1] = 1;
+                    g_gMulSwd.Active[2] = 1;
+                    g_gMulSwd.Active[3] = 1;
+                }                                
+            }            
+        }
+        
+
         lua_do((char *)&g_tModS.RxBuf[4]);
     }
 

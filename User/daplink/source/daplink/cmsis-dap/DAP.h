@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @file    DAP.h
  * @brief   Access to ARM DAP using CMSIS-DAP protocol
  *
@@ -252,7 +252,7 @@ static __forceinline void PIN_DELAY_SLOW (uint32_t delay) {
   uint32_t count;
 
   count = delay;
-  while (--count);
+  while (count--);
 }
 
 // Fixed delay for fast clock generation

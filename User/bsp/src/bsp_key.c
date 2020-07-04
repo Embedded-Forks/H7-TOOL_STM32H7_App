@@ -177,8 +177,8 @@ static void bsp_InitKeyHard(void)
 
     /* 第2步：配置所有的按键GPIO为浮动输入模式(实际上CPU复位后就是输入状态) */
     gpio_init.Mode = GPIO_MODE_INPUT;               /* 设置输入 */
-    gpio_init.Pull = GPIO_NOPULL;                   /* 上下拉电阻不使能 */
-    gpio_init.Speed = GPIO_SPEED_FREQ_VERY_HIGH;    /* GPIO速度等级 */
+    gpio_init.Pull = GPIO_PULLUP;                   /* 使能上拉电阻 */
+    gpio_init.Speed = GPIO_SPEED_FREQ_MEDIUM;    /* GPIO速度等级 */
 
     for (i = 0; i < HARD_KEY_NUM; i++)
     {
@@ -237,6 +237,8 @@ static void bsp_InitKeyVar(void)
 */
 void bsp_PutKey(uint8_t _KeyCode)
 {
+    s_KeyTimeOutCount = GetSleepTimeMinute() * 60 * 100u;  /* 10ms单位 */
+    
     /* 屏幕熄灭阶段，丢弃唤醒键 */
     if (s_LcdOn == 0)
     {        
@@ -258,8 +260,6 @@ void bsp_PutKey(uint8_t _KeyCode)
     {
         s_tKey.Write = 0;
     }
-            
-    s_KeyTimeOutCount = GetSleepTimeMinute() * 60 * 100u;  /* 10ms单位 */
 }
 
 /*
@@ -358,7 +358,9 @@ void bsp_SetKeyParam(uint8_t _ucKeyID, uint16_t _LongTime, uint8_t _RepeatSpeed)
 */
 void bsp_ClearKey(void)
 {
-    s_tKey.Read = s_tKey.Write;
+    s_tKey.Write = 0;
+    s_tKey.Read = 0;
+    s_tKey.Read2 = 0;
 }
 
 /*

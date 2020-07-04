@@ -98,48 +98,48 @@ void status_SystemSetMain(void)
             /* 有键按下 */
             switch (ucKeyCode)
             {
-            case KEY_UP_S: /* S键 上 */
-                LCD_MoveUpMenu(&g_tMenuSys);
-                break;
+                case KEY_UP_S: /* S键 上 */
+                    LCD_MoveUpMenu(&g_tMenuSys);
+                    break;
 
-            case KEY_LONG_DOWN_S: /* S键 上 */
-                PlayKeyTone();
-                s_enter_sub_menu = 1;
+                case KEY_LONG_DOWN_S: /* S键 上 */
+                    PlayKeyTone();
+                    s_enter_sub_menu = 1;
 
-                if (g_tMenuSys.Cursor == 0)
-                {
-                    g_MainStatus = MS_HARD_INFO;
-                }
-                else if (g_tMenuSys.Cursor == 1)
-                {
-                    g_MainStatus = MS_MODIFY_PARAM;
-                }
-                else if (g_tMenuSys.Cursor == 2)
-                {
-                    g_MainStatus = MS_ESP32_TEST;
-                }
-                else if (g_tMenuSys.Cursor == 3)
-                {
-                    g_MainStatus = MS_USB_EMMC;
-                }    
-                else if (g_tMenuSys.Cursor == 4)
-                {
-                    g_MainStatus = MS_FILE_MANAGE;
-                }                                
-                break;
+                    if (g_tMenuSys.Cursor == 0)
+                    {
+                        g_MainStatus = MS_HARD_INFO;
+                    }
+                    else if (g_tMenuSys.Cursor == 1)
+                    {
+                        g_MainStatus = MS_MODIFY_PARAM;
+                    }
+                    else if (g_tMenuSys.Cursor == 2)
+                    {
+                        g_MainStatus = MS_ESP32_TEST;
+                    }
+                    else if (g_tMenuSys.Cursor == 3)
+                    {
+                        g_MainStatus = MS_USB_EMMC;
+                    }    
+                    else if (g_tMenuSys.Cursor == 4)
+                    {
+                        g_MainStatus = MS_FILE_MANAGE;
+                    }                                
+                    break;
 
-            case KEY_UP_C: /* C键 下 */
-                LCD_MoveDownMenu(&g_tMenuSys);
-                break;
+                case KEY_UP_C: /* C键 下 */
+                    LCD_MoveDownMenu(&g_tMenuSys);
+                    break;
 
-            case KEY_LONG_DOWN_C: /* C键长按 */
-                PlayKeyTone();
-                s_enter_sub_menu = 0;
-                g_MainStatus = MS_LINK_MODE;
-                break;
+                case KEY_LONG_DOWN_C: /* C键长按 */
+                    PlayKeyTone();
+                    s_enter_sub_menu = 0;
+                    g_MainStatus = MS_EXTEND_MENU1;
+                    break;
 
-            default:
-                break;
+                default:
+                    break;
             }
         }
     }
@@ -343,16 +343,16 @@ void status_HardInfo(void)
             /* 有键按下 */
             switch (ucKeyCode)
             {
-            case KEY_UP_C:      /* C键 下 */
-                break;
+                case KEY_UP_C:      /* C键 下 */
+                    break;
 
-            case KEY_LONG_DOWN_C:    /* C键长按 */
-                PlayKeyTone();
-                g_MainStatus = MS_SYSTEM_SET;
-                break;
+                case KEY_LONG_DOWN_C:    /* C键长按 */
+                    PlayKeyTone();
+                    g_MainStatus = MS_SYSTEM_SET;
+                    break;
 
-            default:
-                break;
+                default:
+                    break;
             }
         }
     }
@@ -366,7 +366,7 @@ void status_HardInfo(void)
 *    返 回 值: 无
 *********************************************************************************************************
 */
-#define PARAM_NUM       3
+#define PARAM_NUM       4
 void status_ModifyParam(void)
 {
     uint8_t ucKeyCode; /* 按键代码 */
@@ -448,6 +448,28 @@ void status_ModifyParam(void)
                     sprintf(buf, "%3d 分钟", min);
                 }
                 DispParamBar(2, "3 屏 保:", buf, active);
+            }      
+            
+            /* 第3个参数 - 文件列表字体  */
+            {
+                if (cursor == 3)
+                {
+                    active = 1;       
+                }
+                else 
+                {
+                    active = 0;
+                }
+                
+                if (g_tParam.FileListFont24 == 1)
+                {
+                    sprintf(buf, "24点阵");
+                }
+                else
+                {
+                    sprintf(buf, "16点阵");
+                }
+                DispParamBar(3, "4 列表字体:", buf, active);
             }             
         }
         
@@ -457,97 +479,119 @@ void status_ModifyParam(void)
             /* 有键按下 */
             switch (ucKeyCode)
             {
-            case KEY_UP_S:      /* S键 弹起 */
-                if (ucIgnoreKey == 1)
-                {
-                    ucIgnoreKey = 0;
-                    break;
-                }
-                
-                if (cursor == 0)
-                {
-                    if (g_tParam.KeyToneEnable == 0)
+                case KEY_UP_S:      /* S键 弹起 */
+                    if (ucIgnoreKey == 1)
                     {
-                        g_tParam.KeyToneEnable = 1;
+                        ucIgnoreKey = 0;
+                        break;
                     }
-                    else
+                    
+                    if (cursor == 0)
                     {
-                        g_tParam.KeyToneEnable = 0;
+                        if (g_tParam.KeyToneEnable == 0)
+                        {
+                            g_tParam.KeyToneEnable = 1;
+                        }
+                        else
+                        {
+                            g_tParam.KeyToneEnable = 0;
+                        }     
+                    }
+                    else if (cursor == 1)
+                    {
+                        g_tParam.UIStyle++;
+                        if (g_tParam.UIStyle >= UI_STYLE_NUM)
+                        {
+                            g_tParam.UIStyle = 0;
+                        }  
                     }     
-                }
-                else if (cursor == 1)
-                {
-                    g_tParam.UIStyle++;
-                    if (g_tParam.UIStyle >= UI_STYLE_NUM)
+                    else if (cursor == 2)
                     {
-                        g_tParam.UIStyle = 0;
+                        if (g_tParam.LcdSleepTime > 0)
+                        {
+                            g_tParam.LcdSleepTime--;
+                        }
+                        else
+                        {
+                            g_tParam.LcdSleepTime = 4;
+                        }
                     }  
-                }     
-                else if (cursor == 2)
-                {
-                    if (g_tParam.LcdSleepTime > 0)
+                    else if (cursor == 3)
                     {
-                        g_tParam.LcdSleepTime--;
-                    }
-                    else
-                    {
-                        g_tParam.LcdSleepTime = 4;
-                    }
-                }                 
-                fRefresh = 1;
-                fSaveParam = 1;
-                break;
+                        if (g_tParam.FileListFont24 == 0)
+                        {
+                            g_tParam.FileListFont24 = 1;
+                        } 
+                        else
+                        {
+                            g_tParam.FileListFont24 = 0;
+                        }
+                    }                 
+                    fRefresh = 1;
+                    fSaveParam = 1;
+                    break;
 
-            case KEY_UP_C:      /* C键 下 */
-                if (cursor == 0)
-                {                
-                    if (g_tParam.KeyToneEnable == 0)
-                    {
-                        g_tParam.KeyToneEnable = 1;
+                case KEY_UP_C:      /* C键 下 */
+                    if (cursor == 0)
+                    {                
+                        if (g_tParam.KeyToneEnable == 0)
+                        {
+                            g_tParam.KeyToneEnable = 1;
+                        }
+                        else
+                        {
+                            g_tParam.KeyToneEnable = 0;
+                        }
                     }
-                    else
+                    else if (cursor == 1)
                     {
-                        g_tParam.KeyToneEnable = 0;
-                    }
-                }
-                else if (cursor == 1)
-                {
-                    if (g_tParam.UIStyle > 0)
-                    {
-                        g_tParam.UIStyle--;
-                    }     
-                    else
-                    {
-                        g_tParam.UIStyle = UI_STYLE_NUM;
-                    }
-                } 
-                else if (cursor == 2)
-                {
-                    if (++g_tParam.LcdSleepTime > 4)
-                    {
-                        g_tParam.LcdSleepTime = 0;
+                        if (g_tParam.UIStyle > 0)
+                        {
+                            g_tParam.UIStyle--;
+                        }     
+                        else
+                        {
+                            g_tParam.UIStyle = UI_STYLE_NUM;
+                        }
                     } 
-                }                 
-                fRefresh = 1;
-                fSaveParam = 1;
-                break;
+                    else if (cursor == 2)
+                    {
+                        if (++g_tParam.LcdSleepTime > 4)
+                        {
+                            g_tParam.LcdSleepTime = 0;
+                        } 
+                    }         
+                    else if (cursor == 3)
+                    {
+                        if (g_tParam.FileListFont24 == 0)
+                        {
+                            g_tParam.FileListFont24 = 1;
+                        } 
+                        else
+                        {
+                            g_tParam.FileListFont24 = 0;
+                        }
+                    }                 
+                    fRefresh = 1;
+                    fSaveParam = 1;
+                    break;
 
-            case KEY_LONG_DOWN_S:        /* S键长按 - 选择参数 */
-                if (++cursor >= PARAM_NUM)
-                {
-                    cursor = 0;
-                }
-                ucIgnoreKey = 1;
-                fRefresh = 1;
-                break;
+                case KEY_LONG_DOWN_S:        /* S键长按 - 选择参数 */
+                    if (++cursor >= PARAM_NUM)
+                    {
+                        cursor = 0;
+                    }
+                    ucIgnoreKey = 1;
+                    fRefresh = 1;
+                    break;
 
-            case KEY_LONG_DOWN_C:        /* C键长按 - 返回 */
-                PlayKeyTone();
-                g_MainStatus = MS_SYSTEM_SET;
-                break;
+                case KEY_LONG_DOWN_C:        /* C键长按 - 返回 */
+                    PlayKeyTone();
+                    g_MainStatus = MS_SYSTEM_SET;
+                    break;
 
-            default:
-                break;
+                default:
+                    break;
             }
         }
     }
@@ -611,38 +655,38 @@ void status_ESP32Test(void)
             /* 有键按下 */
             switch (ucKeyCode)
             {
-            case KEY_UP_S: /* S键 弹起 */
-                PlayKeyTone();
+                case KEY_UP_S: /* S键 弹起 */
+                    PlayKeyTone();
 
-                if (isp_flag == 0)
-                {
-                    isp_flag = 1;
+                    if (isp_flag == 0)
+                    {
+                        isp_flag = 1;
 
-                    ESP32_EnterISP();
-                }
-                else
-                {
-                    isp_flag = 0;
+                        ESP32_EnterISP();
+                    }
+                    else
+                    {
+                        isp_flag = 0;
 
-                    ESP32_EnterAT();
-                }
-                fRefresh = 1;
-                break;
+                        ESP32_EnterAT();
+                    }
+                    fRefresh = 1;
+                    break;
 
-            case KEY_UP_C: /* C键 下 */
-                fRefresh = 1;
-                break;
+                case KEY_UP_C: /* C键 下 */
+                    fRefresh = 1;
+                    break;
 
-            case KEY_LONG_DOWN_S: /* S键 上 */
-                break;
+                case KEY_LONG_DOWN_S: /* S键 上 */
+                    break;
 
-            case KEY_LONG_DOWN_C: /* C键长按 */
-                PlayKeyTone();
-                g_MainStatus = MS_SYSTEM_SET;
-                break;
+                case KEY_LONG_DOWN_C: /* C键长按 */
+                    PlayKeyTone();
+                    g_MainStatus = MS_SYSTEM_SET;
+                    break;
 
-            default:
-                break;
+                default:
+                    break;
             }
         }
     }
@@ -662,7 +706,7 @@ void status_UsbEMMC(void)
 {
     uint8_t ucKeyCode;          /* 按键代码 */
     
-    DispHeader2(93, "USB eMMM磁盘");
+    DispHeader2(93, "USB eMMC磁盘");
     DispHelpBar("请在电脑操作eMMC文件",
                 "");
     
@@ -681,22 +725,22 @@ void status_UsbEMMC(void)
             /* 有键按下 */
             switch (ucKeyCode)
             {
-            case KEY_UP_S:      /* S键 弹起 */
-                break;
+                case KEY_UP_S:      /* S键 弹起 */
+                    break;
 
-            case KEY_UP_C:      /* C键 下 */
-                break;
+                case KEY_UP_C:      /* C键 下 */
+                    break;
 
-            case KEY_LONG_DOWN_S:    /* S键 上 */
-                break;
+                case KEY_LONG_DOWN_S:    /* S键 上 */
+                    break;
 
-            case KEY_LONG_DOWN_C:    /* C键长按 */
-                PlayKeyTone();
-                g_MainStatus = MS_SYSTEM_SET;
-                break;
+                case KEY_LONG_DOWN_C:    /* C键长按 */
+                    PlayKeyTone();
+                    g_MainStatus = MS_SYSTEM_SET;
+                    break;
 
-            default:
-                break;
+                default:
+                    break;
             }
         }
     }
@@ -853,47 +897,47 @@ void status_FileManage(void)
             /* 有键按下 */
             switch (ucKeyCode)
             {
-            case KEY_UP_S:      /* S键释放 - 移动按钮焦点*/    
-				if (++cursor == BTN_NUM)
-				{
-					cursor = 0;
-				}
-				fRefresh = 1;
-                break;
+                case KEY_UP_S:      /* S键释放 - 移动按钮焦点*/    
+                    if (++cursor == BTN_NUM)
+                    {
+                        cursor = 0;
+                    }
+                    fRefresh = 1;
+                    break;
 
-           case KEY_UP_C:      /* C键释放 - 确认执行按钮功能 */ 		
-				if (cursor > 0)
-				{
-					cursor--;
-				}             
-                else
-                {
-                    cursor = BTN_NUM - 1;
-                }
-                fRefresh = 1;
-                break;
+               case KEY_UP_C:      /* C键释放 - 确认执行按钮功能 */ 		
+                    if (cursor > 0)
+                    {
+                        cursor--;
+                    }             
+                    else
+                    {
+                        cursor = BTN_NUM - 1;
+                    }
+                    fRefresh = 1;
+                    break;
 
-            case KEY_LONG_DOWN_S:       /* S键长按 - 确认后，闪烁，修改参数 */      
-				if (cursor == 0)
-				{
-                    FM_WirteFont();     /* 写字库 */
-				}
-				else if (cursor == 1)
-				{
-                    FM_WirteBoot();     /* 写QSPI App */
-				}
-				else if (cursor == 2)
-				{
-                    FM_WirteQspiApp();
-				}	                
-                break;
-            
-            case KEY_LONG_DOWN_C:    /* C键长按 */
-                g_MainStatus = MS_SYSTEM_SET;
-                break;
+                case KEY_LONG_DOWN_S:       /* S键长按 - 确认后，闪烁，修改参数 */      
+                    if (cursor == 0)
+                    {
+                        FM_WirteFont();     /* 写字库 */
+                    }
+                    else if (cursor == 1)
+                    {
+                        FM_WirteBoot();     /* 写QSPI App */
+                    }
+                    else if (cursor == 2)
+                    {
+                        FM_WirteQspiApp();
+                    }	                
+                    break;
+                
+                case KEY_LONG_DOWN_C:    /* C键长按 */
+                    g_MainStatus = MS_SYSTEM_SET;
+                    break;
 
-            default:
-                break;
+                default:
+                    break;
             }
         }
     }
@@ -943,11 +987,12 @@ void FM_DispProgress(uint8_t _percent, uint32_t _time1)
 	
     if (s_percent == 0 || s_percent != _percent || s_ms != _time1 / 100)
     {
-        DispProgressBar(5, 200, 24, 240 - 2 * 5, "", _percent, &tFont); 
-
         /* 100.2 秒 */
         sprintf(buf, "%d.%d 秒", _time1 / 1000, (_time1 % 1000) / 100);
-        LCD_DispStr(160, 200 + 4, buf, &tFont);
+        
+        DispProgressBar(5, 200, 24, 240 - 2 * 5, "", _percent, buf, &tFont); 
+
+//        LCD_DispStr(160, 200 + 4, buf, &tFont);
         ST7789_DrawScreen();    /* 硬件SPI+DMA+刷屏 */ 
 
         s_percent = _percent;

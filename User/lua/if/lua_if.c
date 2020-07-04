@@ -3,7 +3,7 @@
 #include "param.h"
 #include "file_lib.h"
 #include "main.h"
-
+#include "prog_if.h"
 
 /* 
 
@@ -28,8 +28,8 @@ uint32_t s_lua_func_init_idx;
 uint32_t s_lua_func_write_idx;
 uint32_t s_lua_func_read_idx;
 
-uint8_t s_lua_read_buf[LUA_READ_LEN_MAX];
-uint8_t s_lua_read_len;
+ALIGN_32BYTES(uint8_t s_lua_read_buf[LUA_READ_LEN_MAX]);
+uint32_t s_lua_read_len;
 
 static uint8_t s_lua_quit = 0;
 
@@ -41,11 +41,11 @@ static void lua_RegisterFunc(void);
 
 static void LuaYeildHook(lua_State *_L, lua_Debug *ar);
 
-/* lua源码调用该函数，会告警 */
-void exit(int status)
-{
-    ;
-}
+///* lua源码调用该函数，会告警 */
+//void exit(int status)
+//{
+//    return;
+//}
 
 int system(const char *cmd)
 {
@@ -126,6 +126,7 @@ void lua_DeInit(void)
 
 // 每行执行的钩子函数，用于终止lua程序
 extern MEMO_T g_LuaMemo;
+extern void PG_PrintText(char *_str);
 void LuaYeildHook(lua_State *_L, lua_Debug *ar)
 {
 	if (s_lua_quit == 1)
@@ -147,7 +148,7 @@ void LuaYeildHook(lua_State *_L, lua_Debug *ar)
             LCD_SetEncode(ENCODE_UTF8);
         }
 
-        ucKeyCode = bsp_GetKey(); /* 读取键值, 无键按下时返回 KEY_NONE = 0 */
+        ucKeyCode = bsp_GetKey2(); /* 读取键值, 无键按下时返回 KEY_NONE = 0 */
         if (ucKeyCode != KEY_NONE)
         {
             /* 有键按下 */
@@ -157,6 +158,36 @@ void LuaYeildHook(lua_State *_L, lua_Debug *ar)
                     lua_yield(_L, 0);   
                     break;
 
+                default:
+                    break;
+            }
+        }        
+    }
+        
+    if (g_MainStatus == MS_PROG_WORK)
+    {
+        uint8_t ucKeyCode;
+
+        ucKeyCode = bsp_GetKey2(); /* 读取键值, 无键按下时返回 KEY_NONE = 0 */
+        if (ucKeyCode != KEY_NONE)
+        {
+            /* 有键按下 */
+            switch (ucKeyCode)
+            {            
+                case KEY_LONG_DOWN_C:   /* C键长按 - 终止Lua */
+                    PG_PrintText("用户终止运行");
+                    g_tProg.AutoStart = 0;
+                    lua_yield(_L, 0); 
+                    break;
+
+                case KEY_UP_S:
+                case KEY_UP_C:
+                    if (g_tProg.AutoStart == 1)
+                    {
+                        ;
+                    }
+                    break;
+                
                 default:
                     break;
             }
@@ -178,7 +209,7 @@ void lua_DownLoadFile(char *_path)
     lua_Init();
     
     // 读文件到内存
-    s_lua_prog_len = ReadFileToMem(_path, s_lua_prog_buf, LUA_PROG_LEN_MAX);
+    s_lua_prog_len = ReadFileToMem(_path, 0, s_lua_prog_buf, LUA_PROG_LEN_MAX);
     
     if (s_lua_prog_len > 0)
     {
@@ -202,6 +233,7 @@ void lua_do(char *buf)
 
 	s_run = 1;
 
+    while(bsp_GetKey2());   /* 读空按键FIFO, */
     
     re = luaL_dostring(g_Lua, buf);
 	if (re != LUA_OK)
@@ -269,6 +301,37 @@ void lua_DoInit(void)
     luaL_dostring(g_Lua, "init()");
 }
 
+void lua_StackDump(lua_State *L) 
+{
+    int i;
+    int top = lua_gettop(L);
+
+    printf("\r\nlua stack top = %d\r\n", top);   
+    for (i = 1; i <= top; i++) 
+    {
+        int t = lua_type(L, i);
+        switch (t) 
+        {
+            case LUA_TSTRING:
+                printf("%d, %s\r\n", i, lua_tostring(L, i));
+                break;
+
+            case LUA_TBOOLEAN:
+                printf("%d, %s\r\n", i, lua_toboolean(L, i) ? "true":"false");
+                break;
+
+            case LUA_TNUMBER:
+                printf("%d, %f\r\n", i, lua_tonumber(L, i));
+                break;
+
+            default:
+                printf("%d, %s\r\n", i, lua_typename(L, t));
+                break;
+
+        }
+    }
+}
+
 // 通信写文件
 uint8_t lua_66H_Write(uint32_t _addr, uint8_t *_buf, uint32_t _len)
 {
@@ -329,15 +392,38 @@ uint8_t lua_67H_Read(uint32_t _addr, uint8_t *_buf, uint32_t _len)
 */
 static int beep(lua_State* L)
 {
-    //检查栈中的参数是否合法，1表示Lua调用时的第一个参数(从左到右)，依此类推。
-    //如果Lua代码在调用时传递的参数不为number，该函数将报错并终止程序的执行。
-//    double op1 = luaL_checknumber(L, 1);
-//    double op2 = luaL_checknumber(L, 2);
+    uint16_t usBeepTime;
+    uint16_t usStopTime;
+    uint16_t usCycle;
     
-    BEEP_KeyTone();
-    
-    //将函数的结果压入栈中。如果有多个返回值，可以在这里多次压入栈中。
-    //lua_pushnumber(L, op1 + op2);
+    if (lua_type(L, 1) == LUA_TNUMBER)  /* 判断第1个参数. */
+    {        
+        usBeepTime = luaL_checknumber(L, 1);
+        
+        if (lua_type(L, 1) == LUA_TNUMBER)  /* 判断第2个参数. */
+        {
+            usStopTime = luaL_checknumber(L, 2);
+        }
+        else
+        {
+            return 0;
+        }
+
+        if (lua_type(L, 1) == LUA_TNUMBER)  /* 判断第3个参数. */
+        {
+            usCycle = luaL_checknumber(L, 3);
+        } 
+        else
+        {
+            return 0;
+        }        
+            
+        BEEP_Start(usBeepTime, usStopTime, usCycle); /* 鸣叫50ms，停10ms， 1次 */
+    }
+    else
+    {
+        BEEP_Start(5, 1, 1); /* 鸣叫50ms，停10ms， 1次 */
+    }
     
     //返回值用于提示该C函数的返回值数量，即压入栈中的返回值数量。
     return 0;
@@ -375,74 +461,138 @@ static int delayms(lua_State* L)
     return 0;
 }
 
-
 /*
 *********************************************************************************************************
-*    函 数 名: printhex
-*    功能说明: 打印hex格式.  pr       nthex(100, 2);    p       inthex("123");    
-*    形    参: 无
+*    函 数 名: print_hex
+*    功能说明: 打印二进制数据    print_hex("123", 16)  print_hex("123", 16, 0x08000000)
+*    形    参: 第1个是二进制数据，第2个是换行位置(缺省16)
 *    返 回 值: 无
 *********************************************************************************************************
 */
 extern uint8_t USBCom_SendBuf(int _Port, uint8_t *_Buf, uint16_t _Len);
 extern void lua_udp_SendBuf(uint8_t *_buf, uint16_t _len, uint16_t _port);
-static int printhex(lua_State* L)
+static int print_hex(lua_State* L)
 {
-    if (lua_type(L, 1) == LUA_TSTRING)     /* 判断第1个参数 */
+    const char *data;
+    size_t len;
+    size_t line_bytes;
+    int i;
+    int j;
+    char buf[128];
+    uint16_t pos = 0;
+    uint8_t ch;
+    size_t intvalue;
+    uint8_t DispAddr = 0;
+    uint32_t addr = 0;
+    
+    if (lua_type(L, 1) == LUA_TSTRING)          /* 判断第1个参数 */
     {        
-        const char *data;
-        size_t len;
-        
-        data = luaL_checklstring(L, 1, &len); /* 1是参数的位置， len是string的长度 */
-        #if PRINT_TO_UDP == 1
-            lua_udp_SendBuf((uint8_t *)data, len, LUA_UDP_PORT);
-        #else    
-            USBCom_SendBuf(1, (uint8_t *)data, len);
-        #endif        
+        data = luaL_checklstring(L, 1, &len);   /* 1是参数的位置， len是string的长度 */     
     }
-
-    if (lua_type(L, 1) == LUA_TNUMBER) /* 判断第1个参数 */
+    else
     {
-        char buf[32];
-        uint32_t num;
-        uint32_t bytes;
-        
-        num = luaL_checknumber(L, 1);
-        if (lua_type(L, 2) == LUA_TNUMBER) /* 判断第2个参数 */
+        buf[0] = 0;
+        for (i = 1; i <= 8; i++)
         {
-            bytes = luaL_checknumber(L, 2);
-            if (bytes == 1)
+            if (lua_type(L, i) == LUA_TNUMBER)
             {
-                sprintf(buf, "0x%02X\r\n", num);
-            }
-            else if (bytes == 2)
-            {
-                sprintf(buf, "0x%04X\r\n", num);
-            }
-            else if (bytes == 3)
-            {
-                sprintf(buf, "0x%06X\r\n", num);
-            }
-            else if (bytes == 4)
-            {
-                sprintf(buf, "0x%08X\r\n", num);
+                intvalue = luaL_checknumber(L, i);
+                
+                sprintf(&buf[strlen(buf)], "%08X ", intvalue);
             }
             else
             {
-                sprintf(buf, "0x%X\r\n", num);
-            }
+                break;
+            }            
         }
-        else
-        {            
-            sprintf(buf, "%X\r\n", num);
+        
+        if (i > 1)
+        {
+            strcpy(&buf[strlen(buf)], "\r\n");
+            #if PRINT_TO_UDP == 1
+                lua_udp_SendBuf((uint8_t *)buf, strlen(buf), LUA_UDP_PORT);
+            #else    
+                USBCom_SendBuf(1, (uint8_t *)buf, strlen(buf));
+            #endif             
         }
+        return 0;
+    }
 
-        #if PRINT_TO_UDP == 1
-            lua_udp_SendBuf((uint8_t *)buf, strlen(buf), LUA_UDP_PORT);
-        #else    
-            USBCom_SendBuf(1, (uint8_t *)buf, strlen(buf));
-        #endif
+    if (lua_type(L, 2) == LUA_TNUMBER)          /* 判断第2个参数 */
+    {
+        line_bytes = luaL_checknumber(L, 2);    /* 每行几个字节 */
+    }
+    else
+    {
+        line_bytes = 16;
     }    
+    if (line_bytes == 0)
+    {
+        line_bytes = 16;
+    }
+    else if (line_bytes > 32)
+    {
+        line_bytes = 32;
+    }
+    
+    if (lua_type(L, 3) == LUA_TNUMBER)      /* 判断第3个参数 */
+    {
+        addr = luaL_checknumber(L, 3);      /* 地址 */
+        DispAddr = 1;     
+    }
+    else
+    {
+        DispAddr = 0;
+    }
+
+    /* 整行打印 */
+    for (i = 0; i < len / line_bytes; i++)
+    {               
+        pos = 0;
+        if (DispAddr != 0)
+        {
+            sprintf(&buf[pos], "%08X : ", addr);
+            pos = 11;
+        }        
+        for (j = 0; j < line_bytes; j++)
+        {
+            ch = *data++;  
+            addr++;
+            
+            buf[pos++] = BcdToChar(ch >> 4);
+            buf[pos++] = BcdToChar(ch & 0x0F);
+            buf[pos++] = ' ';
+        }
+        buf[pos++] = '\r'; 
+        buf[pos++] = '\n'; 
+        #if PRINT_TO_UDP == 1
+            lua_udp_SendBuf((uint8_t *)buf, pos, LUA_UDP_PORT);
+        #else    
+            USBCom_SendBuf(1, (uint8_t *)buf, pos);
+        #endif        
+        bsp_Idle();
+    }
+    
+    /* 打印不足一行的数据 */
+    if (len % line_bytes)
+    {
+        pos = 0;
+        for (j = 0; j < (len % line_bytes); j++)
+        {
+            ch = *data++;
+            buf[pos++] = BcdToChar(ch >> 4);
+            buf[pos++] = BcdToChar(ch & 0x0F);
+            buf[pos++] = ' ';
+        }
+        buf[pos++] = '\r'; 
+        buf[pos++] = '\n'; 
+        #if PRINT_TO_UDP == 1
+            lua_udp_SendBuf((uint8_t *)buf, pos, LUA_UDP_PORT);
+        #else    
+            USBCom_SendBuf(1, (uint8_t *)buf, pos);
+        #endif         
+    }
+    
     return 1;
 }
 
@@ -543,7 +693,7 @@ static int get_runtime(lua_State* L)
 static int check_runtime(lua_State* L)
 {
     int32_t lasttime;
-    uint8_t re;
+    int32_t re;
     
     if (lua_type(L, 1) == LUA_TNUMBER) /* 判断第1个参数 */
     {
@@ -579,6 +729,72 @@ int l_my_print(lua_State* L)
 
 /*
 *********************************************************************************************************
+*    函 数 名: get_key
+*    功能说明: 读取键值
+*    形    参: 无
+*    返 回 值: 无
+*********************************************************************************************************
+*/
+static int get_key(lua_State* L)
+{
+    uint8_t key;
+    
+    key = bsp_GetKey();
+    lua_pushnumber(L, key); 
+    return 1;
+}
+
+/*
+*********************************************************************************************************
+*    函 数 名: put_key
+*    功能说明: 模拟一个键值
+*    形    参: 无
+*    返 回 值: 无
+*********************************************************************************************************
+*/
+static int put_key(lua_State* L)
+{
+    uint8_t key;
+    
+    if (lua_type(L, 1) == LUA_TNUMBER)  /* 判断第1个参数 */
+    {
+        key = luaL_checknumber(L, 1);
+    }
+    
+    bsp_PutKey(key);
+    return 0;
+}
+
+/*
+*********************************************************************************************************
+*    函 数 名: clear_key
+*    功能说明: 清除按键缓冲区
+*    形    参: 无
+*    返 回 值: 无
+*********************************************************************************************************
+*/
+static int clear_key(lua_State* L)
+{   
+    bsp_ClearKey();
+    return 0;
+}
+
+/*
+*********************************************************************************************************
+*    函 数 名: load_file
+*    功能说明: 加载lua文件
+*    形    参: 无
+*    返 回 值: 无
+*********************************************************************************************************
+*/
+static int load_file(lua_State* L)
+{   
+    return 0;
+}
+
+
+/*
+*********************************************************************************************************
 *    函 数 名: lua_RegisterFunc
 *    功能说明: 注册lua可调用的c函数
 *    形    参: 无
@@ -592,11 +808,16 @@ static void lua_RegisterFunc(void)
     lua_register(g_Lua, "beep", beep);
     lua_register(g_Lua, "delayus", delayus);
     lua_register(g_Lua, "delayms", delayms);
-    lua_register(g_Lua, "printhex", printhex);
+    lua_register(g_Lua, "print_hex", print_hex);
     lua_register(g_Lua, "write_clock", write_clock);
     lua_register(g_Lua, "read_clock", read_clock);
     lua_register(g_Lua, "get_runtime", get_runtime);
     lua_register(g_Lua, "check_runtime", check_runtime);
+    lua_register(g_Lua, "get_key", get_key);
+    lua_register(g_Lua, "put_key", put_key);
+    lua_register(g_Lua, "clear_key", clear_key);
+    
+    lua_register(g_Lua, "load_file", load_file);
     
     /* 注册接口函数 */
     lua_gpio_RegisterFun();    
@@ -606,7 +827,8 @@ static void lua_RegisterFunc(void)
     lua_tcp_RegisterFun();
     lua_qspi_RegisterFun();
     lua_fatfs_RegisterFun();
-    lua_swd_RegisterFun();    
+    lua_swd_RegisterFun();   
+    lua_swim_RegisterFun();  
     lua_adc_RegisterFun();
     lua_dac_RegisterFun();
     lua_reg_RegisterFun();
@@ -614,4 +836,4 @@ static void lua_RegisterFunc(void)
     lua_uart_RegisterFun();
 }
 
-
+/***************************** 安富莱电子 www.armfly.com (END OF FILE) *********************************/
