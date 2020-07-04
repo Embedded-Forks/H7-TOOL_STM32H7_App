@@ -29,6 +29,7 @@ enum
     MS_PROG_SELECT_FILE,    /* 脱机下载器浏览文件 */
     MS_PROG_WORK,           /* 脱机下载器工作界面 */
     MS_PROG_SETTING,        /* 脱机下载器参数设置 */
+    MS_PROG_MODIFY_PARAM,   /* 修改参数比如复位类型 */
     
     MS_VOLTAGE_METER,       /* 电压表 */
     MS_CURRENT_METER,       /* 高侧电流表 */
@@ -61,7 +62,7 @@ void DispBox(uint16_t _usX, uint16_t _usY, uint16_t _usHeight, uint16_t _usWidth
 void DispLabel(uint16_t _usX, uint16_t _usY, uint16_t _usHeight, uint16_t _usWidth, 
     uint16_t _usColor, char *_pStr, FONT_T *_tFont);
 void DispProgressBar(uint16_t _usX, uint16_t _usY, uint16_t _usHeight, uint16_t _usWidth, 
-    char *_str, float _Percent, FONT_T *_tFont);
+    char *_str1, float _Percent, char *_str2, FONT_T *_tFont);
 void ProgressBarSetColor(uint16_t _Color);
 uint16_t NextStatus(uint16_t _NowStatus);
 uint16_t LastStatus(uint16_t _NowStatus);

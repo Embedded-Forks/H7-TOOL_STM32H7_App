@@ -9,12 +9,14 @@
 #include "target_reset.h"
 #include "target_config.h"
 #include "swd_host.h"
+#include "swd_host_multi.h"
 #include "Systick_Handler.h"
 #include "main.h"
 #include "target_family.h"
 #include "stm8_flash.h"
 #include "stm8_swim.h"
 #include "swd_flash.h"
+#include "SW_DP_Multi.h"
 
 /* 为了避免和DAP驱动中的函数混淆，本模块函数名前缀用 h7swd */
 
@@ -22,6 +24,13 @@ static int h7swd_Init(lua_State* L);
 static int h7swd_ReadID(lua_State* L);
 static int h7swd_WriteMemory(lua_State* L);
 static int h7swd_ReadMemory(lua_State* L);
+
+static int h7swd_Write32(lua_State* L);
+static int h7swd_Read32(lua_State* L);
+static int h7swd_Write16(lua_State* L);
+static int h7swd_Read16(lua_State* L);
+static int h7swd_Write8(lua_State* L);
+static int h7swd_Read8(lua_State* L);
 
 static int h7_LoadAlgoFile(lua_State* L);
 static int h7_ProgFile(lua_State* L);
@@ -36,7 +45,8 @@ static int h7_EraseSector(lua_State* L);
 
 static int h7_Read_ProductSN(lua_State* L);
 static int h7_Write_ProductSN(lua_State* L);
-static int h7_ReladLuaVar(lua_State* L);
+static int h7_ReloadLuaVar(lua_State* L);
+static int h7_ReadCVar(lua_State* L);
 
 static int h7swd_ReadExtID(lua_State* L);
 
@@ -62,10 +72,15 @@ void lua_swd_RegisterFun(void)
 
     lua_register(g_Lua, "pg_init", h7swd_Init);    
     lua_register(g_Lua, "pg_get_chip_id", h7swd_ReadID);    
-    lua_register(g_Lua, "pg_write_mem", h7swd_WriteMemory);    
+    lua_register(g_Lua, "pg_write_mem", h7swd_WriteMemory); 	
     lua_register(g_Lua, "pg_read_mem", h7swd_ReadMemory);  
 
-
+    lua_register(g_Lua, "pg_write32", h7swd_Write32);    
+    lua_register(g_Lua, "pg_read32", h7swd_Read32);  
+    lua_register(g_Lua, "pg_write16", h7swd_Write16);    
+    lua_register(g_Lua, "pg_read16", h7swd_Read16);  
+    lua_register(g_Lua, "pg_write8", h7swd_Write8);    
+    lua_register(g_Lua, "pg_read8", h7swd_Read8);
     
     lua_register(g_Lua, "pg_get_ext_id", h7swd_ReadExtID);     
         
@@ -83,27 +98,82 @@ void lua_swd_RegisterFun(void)
     lua_register(g_Lua, "pg_read_sn", h7_Read_ProductSN);
     lua_register(g_Lua, "pg_write_sn", h7_Write_ProductSN);
     
-    lua_register(g_Lua, "pg_reload_var", h7_ReladLuaVar);
+    lua_register(g_Lua, "pg_reload_var", h7_ReloadLuaVar);
+    
+    lua_register(g_Lua, "pg_read_c_var", h7_ReadCVar);
 }
 
 /*
 *********************************************************************************************************
-*    函 数 名: h7_ReladLuaVar
-*    功能说明: 读芯片ID
+*    函 数 名: h7_ReloadLuaVar
+*    功能说明: lua通知程序更新变量
 *    形    参: 无
 *    返 回 值: 无
 *********************************************************************************************************
 */
-static int h7_ReladLuaVar(lua_State* L)
+extern uint8_t PG_LuaUidSnUsr(void);
+static int h7_ReloadLuaVar(lua_State* L)
 {
-    PG_ReloadLuaVar();            
-    return 1;
+    const char *pVarName;
+    size_t len;
+    
+    if (lua_type(L, 1) == LUA_TSTRING)              /* 判断第1个参数 */
+    {
+        pVarName = luaL_checklstring(L, 1, &len);   /* 1是参数的位置， len是string的长度 */   
+            
+        if (strcmp(pVarName, "UidSnUsr") == 0)
+        {
+            PG_LuaUidSnUsr(); 
+        }
+        else if (strcmp(pVarName, "ChipInfo") == 0)
+        {
+            PG_ReloadLuaVar();
+        }    
+    }
+    else
+    {
+        PG_ReloadLuaVar();
+    }
+    return 0;
 }
 
 /*
 *********************************************************************************************************
+*    函 数 名: h7_ReadCVar
+*    功能说明: lua读取c全局变量
+*    形    参: 无
+*    返 回 值: 无
+*********************************************************************************************************
+*/
+static int h7_ReadCVar(lua_State* L)
+{
+    const char *pVarName;
+    size_t len;
+        
+    if (lua_type(L, 1) == LUA_TSTRING)              /* 判断第1个参数 */
+    {        
+        pVarName = luaL_checklstring(L, 1, &len);   /* 1是参数的位置， len是string的长度 */   
+        
+        if (strcmp(pVarName, "MultiProgMode") == 0)
+        {
+            lua_pushnumber(L, g_gMulSwd.MultiMode);   
+        }
+        else
+        {
+            lua_pushnumber(L, 0);    /* 出错 */
+        }        
+    }
+    else
+    {
+        lua_pushnumber(L, 0);    /* 出错 */
+    }  
+    
+    return 1;
+}
+/*
+*********************************************************************************************************
 *    函 数 名: h7swd_Init
-*    功能说明: 读芯片ID
+*    功能说明: 初始化swd
 *    形    参: 无
 *    返 回 值: 无
 *********************************************************************************************************
@@ -112,9 +182,16 @@ static int h7swd_Init(lua_State* L)
 {
     if (g_tProg.ChipType == CHIP_SWD_ARM)
     {   
-        sysTickInit();    /* 这是DAP驱动中的初始化函数,全局变量初始化 */
-            
-        swd_init_debug();           /* 进入swd debug状态 */    
+        sysTickInit();          /* 这是DAP驱动中的初始化函数,全局变量初始化 */
+
+        if (g_gMulSwd.MultiMode > 0)   /* 多路模式 */
+        {
+            MUL_swd_init_debug();   /* 进入swd debug状态 */    
+        }
+        else
+        {
+            swd_init_debug();       /* 进入swd debug状态 */
+        }
     }
     else if (g_tProg.ChipType == CHIP_SWIM_STM8)
     {        
@@ -141,17 +218,32 @@ static int h7swd_Init(lua_State* L)
 static int h7swd_ReadID(lua_State* L)
 {
     uint32_t id;
+    uint32_t id_buf[4];
 
     if (g_tProg.ChipType == CHIP_SWD_ARM)
     {
-        if (swd_read_idcode(&id) == 0)
+		if (g_gMulSwd.MultiMode > 0)   /* 多路模式 */
         {
-            lua_pushnumber(L, 0);    /* 出错 */
-        }
-        else
-        {
-            lua_pushnumber(L, id);    /* 成功,返回ID */
-        } 
+	        if (MUL_swd_read_idcode(id_buf) == 0)        
+	        {
+	            lua_pushnumber(L, 0);    /* 出错 */
+	        }
+	        else
+	        {
+	            lua_pushnumber(L, id);    /* 成功,返回ID */
+	        }             
+		}
+		else
+		{
+	        if (swd_read_idcode(&id) == 0)   
+	        {
+	            lua_pushnumber(L, 0);    /* 出错 */
+	        }
+	        else
+	        {
+	            lua_pushnumber(L, id);    /* 成功,返回ID */
+	        }			
+		}
     }
     else if (g_tProg.ChipType == CHIP_SWIM_STM8)
     {
@@ -181,7 +273,7 @@ static int h7swd_WriteMemory(lua_State* L)
     const char *data;
     size_t len = 0;
     
-    sysTickInit();    /* 这是DAP驱动中的初始化函数,全局变量初始化 */
+//    sysTickInit();    /* 这是DAP驱动中的初始化函数,全局变量初始化 */
 
     if (lua_type(L, 1) == LUA_TNUMBER) /* 判断第1个参数 */
     {
@@ -206,14 +298,28 @@ static int h7swd_WriteMemory(lua_State* L)
     
     if (g_tProg.ChipType == CHIP_SWD_ARM) 
     {
-        if (swd_write_memory(addr, (uint8_t *)data, len) == 0)
+        if (g_gMulSwd.MultiMode > 0)   /* 多路模式 */
         {
-            lua_pushnumber(L, 0);    /* 出错 */
+            if (MUL_swd_write_memory(addr, (uint8_t *)data, len) == 0)
+            {
+                lua_pushnumber(L, 0);    /* 出错 */
+            }
+            else
+            {
+                lua_pushnumber(L, 1);    /* 成功 */
+            }
         }
         else
         {
-            lua_pushnumber(L, 1);    /* 成功 */
-        }
+            if (swd_write_memory(addr, (uint8_t *)data, len) == 0)
+            {
+                lua_pushnumber(L, 0);    /* 出错 */
+            }
+            else
+            {
+                lua_pushnumber(L, 1);    /* 成功 */
+            }                       
+        }            
     }
     else if (g_tProg.ChipType == CHIP_SWIM_STM8)
     {
@@ -272,16 +378,38 @@ static int h7swd_ReadMemory(lua_State* L)
     
     if (g_tProg.ChipType == CHIP_SWD_ARM)
     {
-        if (swd_read_memory(addr, s_lua_read_buf, num) == 0)
-        {
-            lua_pushnumber(L, 0);    /* 出错 */
+        if (g_gMulSwd.MultiMode > 0)   /* 多路模式 */
+        {    
+            if (MUL_swd_read_memory(addr, s_lua_read_buf, num) == 0)
+            {
+                lua_pushnumber(L, 0);    /* 出错 */
+            }
+            else
+            {
+                lua_pushnumber(L, 1);    /* 成功 */
+            }
+            
+            lua_pushlstring(L, (char *)s_lua_read_buf, num); 
+            lua_pushlstring(L, (char *)(s_lua_read_buf + num), num); 
+            lua_pushlstring(L, (char *)(s_lua_read_buf + 2 * num), num); 
+            lua_pushlstring(L, (char *)(s_lua_read_buf + 3 * num), num); 
+            return 5;
         }
         else
-        {
-            lua_pushnumber(L, 1);    /* 成功 */
-        }
+        {            
+            if (swd_read_memory(addr, s_lua_read_buf, num) == 0)
+            {
+                lua_pushnumber(L, 0);    /* 出错 */
+            }
+            else
+            {
+                lua_pushnumber(L, 1);    /* 成功 */
+            }
 
-        lua_pushlstring(L, (char *)s_lua_read_buf, num); 
+            lua_pushlstring(L, (char *)s_lua_read_buf, num); 
+            
+            return 2;
+        }
     }
     else if (g_tProg.ChipType == CHIP_SWIM_STM8)
     {
@@ -294,13 +422,530 @@ static int h7swd_ReadMemory(lua_State* L)
             lua_pushnumber(L, 1);    /* 成功 */
         }
         
-        lua_pushlstring(L, (char *)s_lua_read_buf, num);         
+        lua_pushlstring(L, (char *)s_lua_read_buf, num); 
+        return 2;        
+    }
+    else
+    {
+        lua_pushnumber(L, 0);    /* 出错 */   
+        return 1;
+    }   
+}
+
+/*
+*********************************************************************************************************
+*    函 数 名: h7swd_Write32
+*    功能说明: 写CPU内存（或寄存器）
+*    形    参: addr : 目标地址
+*              data : 数据
+*    返 回 值: 0 失败   1 成功
+*********************************************************************************************************
+*/
+static int h7swd_Write32(lua_State* L)
+{
+    uint32_t addr = 0;
+    uint32_t data;
+
+    if (lua_type(L, 1) == LUA_TNUMBER) 		/* 判断第1个参数 */
+    {
+        addr = luaL_checknumber(L, 1);      /* 目标内存地址 */
+    }
+    else
+    {
+        lua_pushnumber(L, 0);    /* 出错 */
+        return 1;        
+    }
+
+    if (lua_type(L, 2) == LUA_TNUMBER)      /* 判断第2个参数 */
+    {        
+        data = luaL_checknumber(L, 2);      /* 目标内存地址 */
+    }
+    else
+    {
+        lua_pushnumber(L, 0);    /* 出错 */
+        return 1;        
+    }    
+    
+    if (g_tProg.ChipType == CHIP_SWD_ARM) 
+    {
+        if (g_gMulSwd.MultiMode > 0)   /* 多路模式 */
+        {
+            if (MUL_swd_write_memory(addr, (uint8_t *)&data, 4) == 0)
+            {
+                lua_pushnumber(L, 0);    /* 出错 */
+            }
+            else
+            {
+                lua_pushnumber(L, 1);    /* 成功 */
+            }
+        }
+        else
+        {
+            if (swd_write_memory(addr, (uint8_t *)&data, 4) == 0)
+            {
+                lua_pushnumber(L, 0);    /* 出错 */
+            }
+            else
+            {
+                lua_pushnumber(L, 1);    /* 成功 */
+            }                       
+        }            
+    }
+    else if (g_tProg.ChipType == CHIP_SWIM_STM8)
+    {
+        if (SWIM_WriteBuf(addr, (uint8_t *)&data, 4) == 0)
+        {
+            lua_pushnumber(L, 0);    /* 出错 */
+        }
+        else
+        {
+            lua_pushnumber(L, 1);    /* 成功 */
+        }
     }
     else
     {
         lua_pushnumber(L, 0);    /* 出错 */       
+    }    
+    return 1;
+}
+
+/*
+*********************************************************************************************************
+*    函 数 名: h7swd_Write16
+*    功能说明: 写CPU内存（或寄存器）
+*    形    参: addr : 目标地址
+*              data : 数据
+*    返 回 值: 0 失败   1 成功
+*********************************************************************************************************
+*/
+static int h7swd_Write16(lua_State* L)
+{
+    uint32_t addr = 0;
+    uint16_t data;
+
+    if (lua_type(L, 1) == LUA_TNUMBER) 		/* 判断第1个参数 */
+    {
+        addr = luaL_checknumber(L, 1);      /* 目标内存地址 */
     }
-    return 2;
+    else
+    {
+        lua_pushnumber(L, 0);    /* 出错 */
+        return 1;        
+    }
+
+    if (lua_type(L, 2) == LUA_TNUMBER)      /* 判断第2个参数 */
+    {        
+        data = luaL_checknumber(L, 2);      /* 目标内存地址 */
+    }
+    else
+    {
+        lua_pushnumber(L, 0);    /* 出错 */
+        return 1;        
+    }    
+    
+    if (g_tProg.ChipType == CHIP_SWD_ARM) 
+    {
+        if (g_gMulSwd.MultiMode > 0)   /* 多路模式 */
+        {
+            if (MUL_swd_write_memory(addr, (uint8_t *)&data, 2) == 0)
+            {
+                lua_pushnumber(L, 0);    /* 出错 */
+            }
+            else
+            {
+                lua_pushnumber(L, 1);    /* 成功 */
+            }
+        }
+        else
+        {
+            if (swd_write_memory(addr, (uint8_t *)&data, 2) == 0)
+            {
+                lua_pushnumber(L, 0);    /* 出错 */
+            }
+            else
+            {
+                lua_pushnumber(L, 1);    /* 成功 */
+            }                       
+        }            
+    }
+    else if (g_tProg.ChipType == CHIP_SWIM_STM8)
+    {
+        if (SWIM_WriteBuf(addr, (uint8_t *)&data, 2) == 2)
+        {
+            lua_pushnumber(L, 0);    /* 出错 */
+        }
+        else
+        {
+            lua_pushnumber(L, 1);    /* 成功 */
+        }
+    }
+    else
+    {
+        lua_pushnumber(L, 0);    /* 出错 */       
+    }    
+    return 1;
+}
+
+/*
+*********************************************************************************************************
+*    函 数 名: h7swd_Write8
+*    功能说明: 写CPU内存（或寄存器）
+*    形    参: addr : 目标地址
+*              data : 数据
+*    返 回 值: 0 失败   1 成功
+*********************************************************************************************************
+*/
+static int h7swd_Write8(lua_State* L)
+{
+    uint32_t addr = 0;
+    uint8_t data;
+
+    if (lua_type(L, 1) == LUA_TNUMBER) 		/* 判断第1个参数 */
+    {
+        addr = luaL_checknumber(L, 1);      /* 目标内存地址 */
+    }
+    else
+    {
+        lua_pushnumber(L, 0);    /* 出错 */
+        return 1;        
+    }
+
+    if (lua_type(L, 2) == LUA_TNUMBER)      /* 判断第2个参数 */
+    {        
+        data = luaL_checknumber(L, 2);      /* 目标内存地址 */
+    }
+    else
+    {
+        lua_pushnumber(L, 0);    /* 出错 */
+        return 1;        
+    }    
+    
+    if (g_tProg.ChipType == CHIP_SWD_ARM) 
+    {
+        if (g_gMulSwd.MultiMode > 0)   /* 多路模式 */
+        {
+            if (MUL_swd_write_memory(addr, (uint8_t *)&data, 1) == 0)
+            {
+                lua_pushnumber(L, 0);    /* 出错 */
+            }
+            else
+            {
+                lua_pushnumber(L, 1);    /* 成功 */
+            }
+        }
+        else
+        {
+            if (swd_write_memory(addr, (uint8_t *)&data, 1) == 0)
+            {
+                lua_pushnumber(L, 0);    /* 出错 */
+            }
+            else
+            {
+                lua_pushnumber(L, 1);    /* 成功 */
+            }                       
+        }            
+    }
+    else if (g_tProg.ChipType == CHIP_SWIM_STM8)
+    {
+        if (SWIM_WriteBuf(addr, (uint8_t *)&data, 1) == 0)
+        {
+            lua_pushnumber(L, 0);    /* 出错 */
+        }
+        else
+        {
+            lua_pushnumber(L, 1);    /* 成功 */
+        }
+    }
+    else
+    {
+        lua_pushnumber(L, 0);    /* 出错 */       
+    }    
+    return 1;
+}
+
+/*
+*********************************************************************************************************
+*    函 数 名: h7swd_Read32
+*    功能说明: 读CPU内存（或寄存器）
+*    形    参: addr : 目标地址
+*              data : 数据缓冲区，含长度
+*    返 回 值: 0 失败   1 成功
+*********************************************************************************************************
+*/
+static int h7swd_Read32(lua_State* L)
+{
+    uint32_t addr;
+    uint32_t num = 4;
+    uint8_t err = 0;
+
+    if (lua_type(L, 1) == LUA_TNUMBER)      /* 判断第1个参数 */
+    {        
+        addr = luaL_checknumber(L, 1);      /* 1是参数的位置， len是string的长度 */        
+    }
+    else
+    {
+        return 0;   /* 返回 nil */
+    }
+    
+    if (g_tProg.ChipType == CHIP_SWD_ARM)
+    {
+        if (g_gMulSwd.MultiMode > 0)   /* 多路模式 */
+        {    
+            memset(s_lua_read_buf, 0, 4 * num);
+            if (MUL_swd_read_memory(addr, s_lua_read_buf, num) == 0)
+            {
+                err = 1;
+            }
+
+            lua_pushnumber(L, *(uint32_t *)s_lua_read_buf);
+            lua_pushnumber(L, *(uint32_t *)(s_lua_read_buf + num));
+            lua_pushnumber(L, *(uint32_t *)(s_lua_read_buf + 2 * num));
+            lua_pushnumber(L, *(uint32_t *)(s_lua_read_buf + 3 * num));
+            
+            if (err == 1)
+            {
+                lua_pushnumber(L, 0);    /* 出错 */
+            }
+            else
+            {
+                lua_pushnumber(L, 1);    /* 成功 */
+            }            
+            return 5;
+        }
+        else
+        {            
+            if (swd_read_memory(addr, s_lua_read_buf, num) == 0)
+            {
+                err = 1;    /* 出错 */
+            }
+            
+            lua_pushnumber(L, *(uint32_t *)s_lua_read_buf); 
+            
+            if (err == 1)
+            {
+                lua_pushnumber(L, 0);    /* 出错 */
+            }
+            else
+            {
+                lua_pushnumber(L, 1);    /* 成功 */
+            }             
+            return 2;
+        }
+    }
+    else if (g_tProg.ChipType == CHIP_SWIM_STM8)
+    {
+        if (SWIM_ReadBuf(addr, s_lua_read_buf, num) == 0)
+        {
+            err = 1;    /* 出错 */
+        }
+        lua_pushnumber(L, *(uint32_t *)s_lua_read_buf); 
+        
+        if (err == 1)        
+        {
+            lua_pushnumber(L, 0);    /* 出错 */
+        }
+        else
+        {
+            lua_pushnumber(L, 1);    /* 成功 */
+        }
+        return 2;        
+    }
+    else
+    {
+        lua_pushnumber(L, 0);    /* 出错 */
+        lua_pushnumber(L, 0);    /* 出错 */ 
+        return 2;
+    }
+}
+
+/*
+*********************************************************************************************************
+*    函 数 名: h7swd_Read16
+*    功能说明: 读CPU内存（或寄存器）
+*    形    参: addr : 目标地址
+*              data : 数据缓冲区，含长度
+*    返 回 值: 读回的数据。出错也返回0
+*********************************************************************************************************
+*/
+static int h7swd_Read16(lua_State* L)
+{
+    uint32_t addr;
+    uint32_t num = 2;
+    uint8_t err = 0;
+
+    if (lua_type(L, 1) == LUA_TNUMBER)      /* 判断第1个参数 */
+    {        
+        addr = luaL_checknumber(L, 1);      /* 1是参数的位置， len是string的长度 */        
+    }
+    else
+    {
+        return 0;   /* 返回 nil */
+    }
+    
+    if (g_tProg.ChipType == CHIP_SWD_ARM)
+    {
+        if (g_gMulSwd.MultiMode > 0)   /* 多路模式 */
+        {    
+            memset(s_lua_read_buf, 0, 4 * num);
+            if (MUL_swd_read_memory(addr, s_lua_read_buf, num) == 0)
+            {
+                err = 1;
+            }
+
+            lua_pushnumber(L, *(uint16_t *)s_lua_read_buf);
+            lua_pushnumber(L, *(uint16_t *)(s_lua_read_buf + num));
+            lua_pushnumber(L, *(uint16_t *)(s_lua_read_buf + 2 * num));
+            lua_pushnumber(L, *(uint16_t *)(s_lua_read_buf + 3 * num));
+            
+            if (err == 1)
+            {
+                lua_pushnumber(L, 0);    /* 出错 */
+            }
+            else
+            {
+                lua_pushnumber(L, 1);    /* 成功 */
+            }            
+            return 5;
+        }
+        else
+        {            
+            if (swd_read_memory(addr, s_lua_read_buf, num) == 0)
+            {
+                err = 1;    /* 出错 */
+            }
+            
+            lua_pushnumber(L, *(uint16_t *)s_lua_read_buf); 
+            
+            if (err == 1)
+            {
+                lua_pushnumber(L, 0);    /* 出错 */
+            }
+            else
+            {
+                lua_pushnumber(L, 1);    /* 成功 */
+            }             
+            return 2;
+        }
+    }
+    else if (g_tProg.ChipType == CHIP_SWIM_STM8)
+    {
+        if (SWIM_ReadBuf(addr, s_lua_read_buf, num) == 0)
+        {
+            err = 1;    /* 出错 */
+        }
+        lua_pushnumber(L, *(uint16_t *)s_lua_read_buf); 
+        
+        if (err == 1)        
+        {
+            lua_pushnumber(L, 0);    /* 出错 */
+        }
+        else
+        {
+            lua_pushnumber(L, 1);    /* 成功 */
+        }
+        return 2;        
+    }
+    else
+    {
+        lua_pushnumber(L, 0);    /* 出错 */
+        lua_pushnumber(L, 0);    /* 出错 */ 
+        return 2;
+    }
+}
+
+/*
+*********************************************************************************************************
+*    函 数 名: h7swd_Read8
+*    功能说明: 读CPU内存（或寄存器）
+*    形    参: addr : 目标地址
+*              data : 数据缓冲区，含长度
+*    返 回 值: 0 失败   1 成功
+*********************************************************************************************************
+*/
+static int h7swd_Read8(lua_State* L)
+{
+     uint32_t addr;
+    uint32_t num = 1;
+    uint8_t err = 0;
+
+    if (lua_type(L, 1) == LUA_TNUMBER)      /* 判断第1个参数 */
+    {        
+        addr = luaL_checknumber(L, 1);      /* 1是参数的位置， len是string的长度 */        
+    }
+    else
+    {
+        return 0;   /* 返回 nil */
+    }
+    
+    if (g_tProg.ChipType == CHIP_SWD_ARM)
+    {
+        if (g_gMulSwd.MultiMode > 0)   /* 多路模式 */
+        {    
+            memset(s_lua_read_buf, 0, 4 * num);
+            if (MUL_swd_read_memory(addr, s_lua_read_buf, num) == 0)
+            {
+                err = 1;
+            }
+
+            lua_pushnumber(L, *(uint8_t *)s_lua_read_buf);
+            lua_pushnumber(L, *(uint8_t *)(s_lua_read_buf + num));
+            lua_pushnumber(L, *(uint8_t *)(s_lua_read_buf + 2 * num));
+            lua_pushnumber(L, *(uint8_t *)(s_lua_read_buf + 3 * num));
+            
+            if (err == 1)
+            {
+                lua_pushnumber(L, 0);    /* 出错 */
+            }
+            else
+            {
+                lua_pushnumber(L, 1);    /* 成功 */
+            }            
+            return 5;
+        }
+        else
+        {            
+            if (swd_read_memory(addr, s_lua_read_buf, num) == 0)
+            {
+                err = 1;    /* 出错 */
+            }
+            
+            lua_pushnumber(L, *(uint8_t *)s_lua_read_buf); 
+            
+            if (err == 1)
+            {
+                lua_pushnumber(L, 0);    /* 出错 */
+            }
+            else
+            {
+                lua_pushnumber(L, 1);    /* 成功 */
+            }             
+            return 2;
+        }
+    }
+    else if (g_tProg.ChipType == CHIP_SWIM_STM8)
+    {
+        if (SWIM_ReadBuf(addr, s_lua_read_buf, num) == 0)
+        {
+            err = 1;    /* 出错 */
+        }
+        lua_pushnumber(L, *(uint8_t *)s_lua_read_buf); 
+        
+        if (err == 1)        
+        {
+            lua_pushnumber(L, 0);    /* 出错 */
+        }
+        else
+        {
+            lua_pushnumber(L, 1);    /* 成功 */
+        }
+        return 2;        
+    }
+    else
+    {
+        lua_pushnumber(L, 0);    /* 出错 */
+        lua_pushnumber(L, 0);    /* 出错 */ 
+        return 2;
+    } 
 }
 
 /*
@@ -347,7 +992,16 @@ static int h7_LoadAlgoFile(lua_State* L)
     {
         lua_pushnumber(L, 0);    /* 出错 */
         return 1;
-    }    
+    }
+    
+    if (lua_type(L, 4) == LUA_TNUMBER) /* 判断第4个参数 (一般不用）*/
+    {
+        g_tVar.SaveAlgoToCFile = luaL_checknumber(L, 4);
+    }
+    else
+    {
+        g_tVar.SaveAlgoToCFile = 0;
+    }
     
     g_AlgoRam.Valid = 1;
     
@@ -462,26 +1116,35 @@ static int h7_ProgFile(lua_State* L)
 *    返 回 值: 无
 *********************************************************************************************************
 */
+extern void MUL_swd_set_target_reset(uint8_t asserted);
 static int h7_reset(lua_State* L)
-{
-//    /* 软件复位目标板 M3 - M7 好像都一样的操作 (该功能需要测试） */
-//    {
-//        uint32_t reg_addr;
-//        uint32_t reg_value;
-
-//        reg_addr = (uint32_t )&SCB->AIRCR;
-//        reg_value = ((0x5FA << SCB_AIRCR_VECTKEY_Pos)      | 
-//                     (SCB->AIRCR & SCB_AIRCR_PRIGROUP_Msk) | 
-//                     SCB_AIRCR_SYSRESETREQ_Msk);                           /* Keep priority group unchanged */         
-//        swd_write_memory(reg_addr, (uint8_t *)&reg_value, 4);   
-//    }
+{   
+    uint32_t delay;
+    
+    
+    if (lua_type(L, 1) == LUA_TNUMBER) /* 判断第1个参数 */
+    {
+        delay = luaL_checknumber(L, 1);       
+    }
+    else
+    {
+        delay = 20;     /* 没有形参，则用20ms */
+    } 
     
     /* 硬件复位 */
+    if (g_gMulSwd.MultiMode > 0)   /* 多路模式 */
+    {
+        MUL_swd_set_target_reset(1);
+        osDelay(delay);
+        MUL_swd_set_target_reset(0);
+        osDelay(delay); 
+    }
+    else        
     {
         swd_set_target_reset(1);
-        osDelay(20);
+        osDelay(delay);
         swd_set_target_reset(0);
-        osDelay(20); 
+        osDelay(delay); 
     }
     
     return 0;
@@ -498,30 +1161,61 @@ static int h7_reset(lua_State* L)
 static int h7_DetectIC(lua_State* L)
 {
     if (g_tProg.ChipType == CHIP_SWD_ARM)
-    {    
-        uint8_t i;
-        uint32_t id = 0;
-        
-        for (i = 0; i < 3; i++)
+    {            
+        if (g_gMulSwd.MultiMode > 0)   /* 多路模式 */
         {
-            sysTickInit();    /* 这是DAP驱动中的初始化函数,全局变量初始化 */
-        
-            bsp_DelayUS(5 * 1000);     /* 延迟10ms */
+            uint8_t i;
+            uint32_t id[4] = {0};
             
-            swd_init_debug();           /* 进入swd debug状态 */
-            
-            if (swd_read_idcode(&id) == 0)
+            sysTickInit();    /* 这是DAP驱动中的初始化函数,全局变量初始化 */            
+            for (i = 0; i < 3; i++)
             {
-                id = 0;     /* 出错继续检测 */
+                bsp_DelayUS(5 * 1000);     /* 延迟5ms */
+                
+                MUL_swd_init_debug();           /* 进入swd debug状态 */
+                
+                if (MUL_swd_read_idcode(id) == 0)
+                {
+                    //id = 0;     /* 出错继续检测 */
+                }
+                else
+                {
+                    break;            
+                }   
             }
-            else
-            {
-                break;            
-            }   
-        }
         
-        lua_pushnumber(L, id);    /* 成功,返回ID */
-        return 1;
+            lua_pushnumber(L, id[0]);    /* 成功,返回ID */
+            lua_pushnumber(L, id[1]);    /* 成功,返回ID */
+            lua_pushnumber(L, id[2]);    /* 成功,返回ID */
+            lua_pushnumber(L, id[3]);    /* 成功,返回ID */            
+            return 4;  
+        }
+        else
+        {            
+            uint8_t i;
+            uint32_t id = 0;
+            
+            for (i = 0; i < 3; i++)
+            {
+                sysTickInit();    /* 这是DAP驱动中的初始化函数,全局变量初始化 */
+            
+                bsp_DelayUS(5 * 1000);     /* 延迟10ms */
+                
+                swd_init_debug();           /* 进入swd debug状态 */
+                
+                if (swd_read_idcode(&id) == 0)
+                {
+                    id = 0;     /* 出错继续检测 */
+                }
+                else
+                {
+                    break;            
+                }   
+            }
+        
+            lua_pushnumber(L, id);    /* 成功,返回ID */
+            return 1;          
+        }
     }
     else if (g_tProg.ChipType == CHIP_SWIM_STM8) 
     {
@@ -771,6 +1465,7 @@ static int h7_ProgBuf_OB(lua_State* L)
 *    返 回 值: 0 失败   1 成功
 *********************************************************************************************************
 */
+#define MUL_BUF_STEP    (LUA_READ_LEN_MAX / 4)        /* s_lua_read_buf 平分4组存放结果 */
 static int h7_Read_OptionBytes(lua_State* L)
 {
     const char *str; 
@@ -801,6 +1496,7 @@ static int h7_Read_OptionBytes(lua_State* L)
         uint32_t Address;
         uint32_t LastAddress;
         uint8_t * pAddr = AddrBuf;
+        uint32_t TempAddr;
        
         while (AddrLen)
         {            
@@ -808,32 +1504,44 @@ static int h7_Read_OptionBytes(lua_State* L)
             pAddr += 4;               
             AddrLen -= 4;
                             
-            if (Address == 0xFFFFFFFF)          /* 遇到0xFFFFFFFF,则插入一个取反的数据 */
+            if (Address == 0xFFFFFFFF)              /* 遇到0xFFFFFFFF,则插入一个取反的数据 */
             {
-                if (swd_read_memory(LastAddress + 1, &s_lua_read_buf[len++], 1) == 0)
-                {
-                    err = 1;
-                    break;
-                }
+                TempAddr = LastAddress + 1;
             }
-            else if (Address == 0xFFFFFFFE)          /* 遇到0xFFFFFFFF,则插入一个取反的数据 */
+            else if (Address == 0xFFFFFFFE)         /* 遇到0xFFFFFFFE,则插入前第2个数据取反的数据 */
             {
-                if (swd_read_memory(LastAddress + 1, &s_lua_read_buf[len++], 1) == 0)
-                {
-                    err = 1;
-                    break;
-                }
+                TempAddr = LastAddress + 1;
                 LastAddress++;
             }            
             else
             {
-                if (swd_read_memory(Address, &s_lua_read_buf[len++], 1) == 0)
+                TempAddr = Address;               
+                LastAddress = Address;               
+            }
+
+            if (g_gMulSwd.MultiMode > 0)   /* 多路模式 */
+            {    
+                uint8_t buf[4];
+                
+                if (MUL_swd_read_memory(TempAddr, buf, 1) == 0)
+                {
+                    err = 1;
+                    break;
+                }                    
+                s_lua_read_buf[0 * MUL_BUF_STEP + len] = buf[0];
+                s_lua_read_buf[1 * MUL_BUF_STEP + len] = buf[1];
+                s_lua_read_buf[2 * MUL_BUF_STEP + len] = buf[2];
+                s_lua_read_buf[3 * MUL_BUF_STEP + len] = buf[3];
+            }
+            else
+            {
+                if (swd_read_memory(TempAddr, &s_lua_read_buf[len], 1) == 0)
                 {
                     err = 1;
                     break;
                 }
-                LastAddress = Address;               
             }
+            len++;            
         }      
     }
     else if (g_tProg.ChipType == CHIP_SWIM_STM8)
@@ -881,8 +1589,20 @@ static int h7_Read_OptionBytes(lua_State* L)
         lua_pushnumber(L, 1);    /* 成功 */
     }
 
-    lua_pushlstring(L, (char *)s_lua_read_buf, len);   
-    return 2;    
+    if (g_gMulSwd.MultiMode > 0)   /* 多路模式 */
+    {
+        lua_pushlstring(L, (char *)(s_lua_read_buf + 0 * MUL_BUF_STEP), len); 
+        lua_pushlstring(L, (char *)(s_lua_read_buf + 1 * MUL_BUF_STEP), len); 
+        lua_pushlstring(L, (char *)(s_lua_read_buf + 2 * MUL_BUF_STEP), len); 
+        lua_pushlstring(L, (char *)(s_lua_read_buf + 3 * MUL_BUF_STEP), len); 
+        return 5;         
+    }
+    else
+    {    
+        lua_pushlstring(L, (char *)s_lua_read_buf, len);
+        return 2;         
+    }
+   
 }
 
 /*
@@ -1050,6 +1770,12 @@ static int h7swd_ReadExtID(lua_State* L)
         }
         
         id = target_flash_init(0x90000000);
+
+        /* SWD进入debug状态 */
+        target_flash_enter_debug_program();
+        /* 装载算法代码到目标机内存 */
+        LoadAlgoToTarget();
+        target_flash_init(0x90000000);
         
         id = target_flash_read_extid(0x90000000);
     

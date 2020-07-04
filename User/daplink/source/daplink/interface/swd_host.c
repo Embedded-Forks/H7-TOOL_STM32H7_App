@@ -30,6 +30,7 @@
 #include "target_family.h"
 #include "prog_if.h"
 #include "file_lib.h"
+#include "SW_DP_Multi.h"
 
 // Default NVIC and Core debug base addresses
 // TODO: Read these addresses from ROM.
@@ -60,7 +61,7 @@ typedef struct {
     uint32_t xpsr;
 } DEBUG_STATE;
 
-static SWD_CONNECT_TYPE reset_connect = CONNECT_NORMAL;
+SWD_CONNECT_TYPE reset_connect = CONNECT_NORMAL;
 
 static DAP_STATE dap_state;
 static uint32_t  soft_reset = SYSRESETREQ;
@@ -144,6 +145,11 @@ uint8_t swd_init(void)
     //       and fixed.
     DAP_Setup();
     PORT_SWD_SETUP();
+    
+    if (g_gMulSwd.MultiMode > 0)   /* 多路模式 */
+    {
+        MUL_SWD_GPIOConfig();
+    }
     return 1;
 }
 
@@ -715,38 +721,44 @@ static uint8_t swd_wait_until_halted(void)
     // Wait for target to stop
     uint32_t val;
     int32_t time1;
+    int32_t addtime = 0;
+    int32_t tt0 = 0;
 
     time1 = bsp_GetRunTime();
     
-    while (1)
+    if (g_tProg.FLMFuncDispProgress == 1)
     {
-        /* 擦除芯片 */
-        if (g_tProg.FLMEraseChipFlag == 1)
+        addtime = 5000;     /* 给5秒的余量 */
+    }    
+    while (1)
+    {           
+        /* 超时控制 */
         {
-            if (g_tProgIni.LastEraseChipTime == 0)
-            {
-                g_tProgIni.LastEraseChipTime = 20000;   /* 第1次缺省按20秒计算进度 */
-            }
+            int32_t tt;
+            float percent;
             
-            /* 整片擦除 */
+            tt = bsp_CheckRunTime(time1);
+            if (tt0 != tt)
             {
-                int32_t tt;
-                float percent;
-                
-                tt = bsp_CheckRunTime(time1);
-                if (tt > g_tProg.FLMFuncTimeout)
+                tt0 = tt;
+                if (tt > g_tProg.FLMFuncTimeout + addtime)
                 {
-                    break;
+                    printf("error : swd_wait_until_halted() timeout\r\n");
+                    break;      /* 超时退出 */
                 }
                 else
                 {
-                    if ((tt % 250) == 0)
+                    if (g_tProg.FLMFuncDispProgress == 1)
                     {
-                        percent = ((float)tt / g_tProgIni.LastEraseChipTime) * 100;                
-                        PG_PrintPercent(percent, 0xFFFFFFFF);
+                        /* 250ms打印1次 */
+                        if ((tt % 250) == 0)
+                        {
+                            percent = ((float)tt / g_tProg.FLMFuncTimeout) * 100;                                
+                            PG_PrintPercent(percent, g_tProg.FLMFuncDispAddr);
+                        }
+                        bsp_Idle();
                     }
-                    bsp_Idle();
-                }                   
+                }
             }
         }
         
@@ -757,8 +769,8 @@ static uint8_t swd_wait_until_halted(void)
 
         if (val & S_HALT) 
         {
-            g_tProg.FLMEraseChipFlag = 0;
-            return 1;
+            g_tProg.FLMFuncDispProgress = 0;
+            return 1;       /* 执行OK */
         } 
         
         if (ProgCancelKey())
@@ -767,7 +779,7 @@ static uint8_t swd_wait_until_halted(void)
             break;         
         }        
     }
-    g_tProg.FLMEraseChipFlag = 0;
+    g_tProg.FLMFuncDispProgress = 0;
     return 0;
 #else    
     // Wait for target to stop
@@ -1249,13 +1261,39 @@ uint8_t swd_set_target_state_sw(TARGET_RESET_STATE state)
                 osDelay(2);
             }
 
-            // Wait until core is halted
-            do {
-                if (!swd_read_word(DBG_HCSR, &val)) {
-                    return 0;
-                }
-            } while ((val & S_HALT) == 0);
 
+            /* 2020-01-18 armfly 增加退出机制 */
+            #if 1
+            // Wait until core is halted
+            {
+                uint32_t i;
+                
+                for (i = 0; i < 100000; i++)
+                {
+                    if (!swd_read_word(DBG_HCSR, &val)) {
+                        return 0;
+                    }
+                    
+                    if ((val & S_HALT) != 0)
+                    {
+                        break;
+                    }
+                }
+                
+                if (i == 100000)
+                {
+                    return 0;   /* 超时 */
+                }
+            }
+            #else              
+                // Wait until core is halted
+                do {
+                    if (!swd_read_word(DBG_HCSR, &val)) {
+                        return 0;
+                    }
+                } while ((val & S_HALT) == 0);
+            #endif
+            
             // Enable halt on reset
             if (!swd_write_word(DBG_EMCR, VC_CORERESET)) {
                 return 0;
@@ -1272,11 +1310,32 @@ uint8_t swd_set_target_state_sw(TARGET_RESET_STATE state)
 
             osDelay(2);
 
-            do {
-                if (!swd_read_word(DBG_HCSR, &val)) {
-                    return 0;
+//            do {
+//                if (!swd_read_word(DBG_HCSR, &val)) {
+//                    return 0;
+//                }
+//            } while ((val & S_HALT) == 0);
+            /* 增加超时退出机制 */
+            {
+                uint32_t i;
+                
+                for (i = 0; i < 100000; i++)
+                {
+                    if (!swd_read_word(DBG_HCSR, &val)) {
+                        return 0;
+                    }
+                    
+                    if ((val & S_HALT) != 0)
+                    {
+                        break;
+                    }
                 }
-            } while ((val & S_HALT) == 0);
+                
+                if (i == 100000)
+                {
+                    return 0;   /* 超时 */
+                }
+            }            
 
             // Disable halt on reset
             if (!swd_write_word(DBG_EMCR, 0)) {
